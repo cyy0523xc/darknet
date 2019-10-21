@@ -1270,12 +1270,9 @@ void calc_anchors(char *datacfg, int num_of_clusters, int width, int height, int
     getchar();
 }
 
-
-void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh,
+void pred_detector(char *name_list, char *cfgfile, char *weightfile, char *filename, float thresh,
     float hier_thresh, int dont_show, int ext_output, int save_labels, char *outfile, int letter_box)
 {
-    list *options = read_data_cfg(datacfg);
-    char *name_list = option_find_str(options, "names", "data/names.list");
     int names_size = 0;
     char **names = get_labels_custom(name_list, &names_size); //get_labels(name_list);
 
@@ -1405,8 +1402,6 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 
     // free memory
     free_ptrs((void**)names, net.layers[net.n - 1].classes);
-    free_list_contents_kvp(options);
-    free_list(options);
 
     int i;
     const int nsize = 8;
@@ -1419,7 +1414,21 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     free(alphabet);
 
     free_network(net);
-}
+}  // end of pred_detector
+
+
+void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh,
+    float hier_thresh, int dont_show, int ext_output, int save_labels, char *outfile, int letter_box)
+{
+    list *options = read_data_cfg(datacfg);
+    char *name_list = option_find_str(options, "names", "data/names.list");
+    pred_detector(name_list, cfgfile, weightfile, filename, thresh,
+            hier_thresh, dont_show, ext_output, save_labels, outfile, letter_box)
+
+    // free memory
+    free_list_contents_kvp(options);
+    free_list(options);
+} // end of test_detector
 
 void run_detector(int argc, char **argv)
 {
