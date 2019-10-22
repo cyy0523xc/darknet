@@ -1423,7 +1423,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     list *options = read_data_cfg(datacfg);
     char *name_list = option_find_str(options, "names", "data/names.list");
     pred_detector(name_list, cfgfile, weightfile, filename, thresh,
-            hier_thresh, dont_show, ext_output, save_labels, outfile, letter_box)
+            hier_thresh, dont_show, ext_output, save_labels, outfile, letter_box);
 
     // free memory
     free_list_contents_kvp(options);
