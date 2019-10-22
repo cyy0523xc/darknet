@@ -444,6 +444,7 @@ int main(int argc, char **argv)
     //test_convolutional_layer();
     if(argc < 2){
         fprintf(stderr, "usage: %s <function>\n", argv[0]);
+        fprintf(stderr, "example: \n  %s detect voc.names yolov3.cfg yolov3_final.weights test.jpg\n", argv[0]);
         return 0;
     }
     gpu_index = find_int_arg(argc, argv, "-i", 0);
