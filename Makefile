@@ -3,7 +3,11 @@ CUDNN=0
 CUDNN_HALF=0
 OPENCV=0
 AVX=0
+# 使用OpenMP支持构建，通过使用多核CPU来加速
 OPENMP=0
+# 构建使用此库的库darknet.so和二进制可运行文件uselib
+# C++示例：https://github.com/AlexeyAB/darknet/blob/master/src/yolo_console_dll.cpp 
+# 或者使用这样的方式：LD_LIBRARY_PATH=./:$LD_LIBRARY_PATH ./uselib data/coco.names cfg/yolov3.cfg yolov3.weights test.mp4
 LIBSO=0
 ZED_CAMERA=0
 
