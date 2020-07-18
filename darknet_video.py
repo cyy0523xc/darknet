@@ -1,11 +1,28 @@
-from ctypes import *
-import math
-import random
+# from ctypes import *
 import os
-import cv2
-import numpy as np
 import time
+import cv2
 import darknet
+
+# 模型配置
+configPath = "./projects/windows-video-monitor/yolov4.cfg"
+weightPath = "./projects/windows-video-monitor/backup/yolov4_final.weights"
+metaPath = "./projects/windows-video-monitor/voc.data"
+
+if not os.path.exists(configPath):
+    raise ValueError("Invalid config path `" +
+                     os.path.abspath(configPath)+"`")
+if not os.path.exists(weightPath):
+    raise ValueError("Invalid weight path `" +
+                     os.path.abspath(weightPath)+"`")
+if not os.path.exists(metaPath):
+    raise ValueError("Invalid data file path `" +
+                     os.path.abspath(metaPath)+"`")
+# batch size = 1
+netMain = darknet.load_net_custom(configPath.encode("ascii"),
+                                  weightPath.encode("ascii"), 0, 1)
+metaMain = darknet.load_meta(metaPath.encode("ascii"))
+
 
 def convertBack(x, y, w, h):
     xmin = int(round(x - (w / 2)))
@@ -15,101 +32,70 @@ def convertBack(x, y, w, h):
     return xmin, ymin, xmax, ymax
 
 
-def cvDrawBoxes(detections, img):
+def cvDrawBoxes(detections, img, wh_rate):
     for detection in detections:
-        x, y, w, h = detection[2][0],\
-            detection[2][1],\
-            detection[2][2],\
-            detection[2][3]
+        x, y, w, h = detection[2][:4]
+        x, y = x*wh_rate[0], y*wh_rate[1]
+        w, h = w*wh_rate[0], h*wh_rate[1]
         xmin, ymin, xmax, ymax = convertBack(
             float(x), float(y), float(w), float(h))
         pt1 = (xmin, ymin)
         pt2 = (xmax, ymax)
-        cv2.rectangle(img, pt1, pt2, (0, 255, 0), 1)
-        cv2.putText(img,
-                    detection[0].decode() +
-                    " [" + str(round(detection[1] * 100, 2)) + "]",
-                    (pt1[0], pt1[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    [0, 255, 0], 2)
+        cv2.rectangle(img, pt1, pt2, (0, 255, 0), 2)
+        # msg = detection[0].decode()
+        msg = detection[0].decode() + " [%.2f]" % detection[1]
+        cv2.putText(img, msg, (pt1[0], pt1[1] - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, [0, 255, 0], 2)
     return img
 
 
-netMain = None
-metaMain = None
-altNames = None
-
-
-def YOLO():
-
-    global metaMain, netMain, altNames
-    configPath = "./cfg/yolov4.cfg"
-    weightPath = "./yolov4.weights"
-    metaPath = "./cfg/coco.data"
-    if not os.path.exists(configPath):
-        raise ValueError("Invalid config path `" +
-                         os.path.abspath(configPath)+"`")
-    if not os.path.exists(weightPath):
-        raise ValueError("Invalid weight path `" +
-                         os.path.abspath(weightPath)+"`")
-    if not os.path.exists(metaPath):
-        raise ValueError("Invalid data file path `" +
-                         os.path.abspath(metaPath)+"`")
-    if netMain is None:
-        netMain = darknet.load_net_custom(configPath.encode(
-            "ascii"), weightPath.encode("ascii"), 0, 1)  # batch size = 1
-    if metaMain is None:
-        metaMain = darknet.load_meta(metaPath.encode("ascii"))
-    if altNames is None:
-        try:
-            with open(metaPath) as metaFH:
-                metaContents = metaFH.read()
-                import re
-                match = re.search("names *= *(.*)$", metaContents,
-                                  re.IGNORECASE | re.MULTILINE)
-                if match:
-                    result = match.group(1)
-                else:
-                    result = None
-                try:
-                    if os.path.exists(result):
-                        with open(result) as namesFH:
-                            namesList = namesFH.read().strip().split("\n")
-                            altNames = [x.strip() for x in namesList]
-                except TypeError:
-                    pass
-        except Exception:
-            pass
-    #cap = cv2.VideoCapture(0)
-    cap = cv2.VideoCapture("test.mp4")
-    cap.set(3, 1280)
-    cap.set(4, 720)
-    out = cv2.VideoWriter(
-        "output.avi", cv2.VideoWriter_fourcc(*"MJPG"), 10.0,
-        (darknet.network_width(netMain), darknet.network_height(netMain)))
+def YOLO(in_path, out_path, thresh=0.25):
+    # cap = cv2.VideoCapture(0)
+    print('In Video: ', in_path)
+    cap = cv2.VideoCapture(in_path)
+    if not cap.isOpened():
+        raise IOError("Couldn't open webcam or video")
+    video_FourCC = int(cap.get(cv2.CAP_PROP_FOURCC))
+    video_fps = cap.get(cv2.CAP_PROP_FPS)
+    video_size = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                  int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+    print("In Video:", type(video_FourCC), video_fps, video_size)
     print("Starting the YOLO loop...")
 
     # Create an image we reuse for each detect
-    darknet_image = darknet.make_image(darknet.network_width(netMain),
-                                    darknet.network_height(netMain),3)
+    input_size = (darknet.network_width(netMain),
+                  darknet.network_height(netMain))
+    darknet_image = darknet.make_image(input_size[0], input_size[1], 3)
+    # 计算长宽缩放比
+    wh_rate = (video_size[0]/input_size[0], video_size[1]/input_size[1])
+    out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"XVID"),
+                          video_fps, video_size)
+    num = 0
+    start = time.time()
     while True:
-        prev_time = time.time()
+        num += 1
+        if num % 100 == 0:
+            print('Parsing %d ...' % num)
+
         ret, frame_read = cap.read()
+        if ret is False:
+            break
+        if frame_read is None:
+            continue
         frame_rgb = cv2.cvtColor(frame_read, cv2.COLOR_BGR2RGB)
-        frame_resized = cv2.resize(frame_rgb,
-                                   (darknet.network_width(netMain),
-                                    darknet.network_height(netMain)),
+        frame_resized = cv2.resize(frame_rgb, input_size,
                                    interpolation=cv2.INTER_LINEAR)
+        darknet.copy_image_from_bytes(darknet_image, frame_resized.tobytes())
+        detections = darknet.detect_image(
+            netMain, metaMain, darknet_image, thresh=thresh)
+        image = cvDrawBoxes(detections, frame_read, wh_rate)
+        out.write(image)
 
-        darknet.copy_image_from_bytes(darknet_image,frame_resized.tobytes())
-
-        detections = darknet.detect_image(netMain, metaMain, darknet_image, thresh=0.25)
-        image = cvDrawBoxes(detections, frame_resized)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        print(1/(time.time()-prev_time))
-        cv2.imshow('Demo', image)
-        cv2.waitKey(3)
     cap.release()
     out.release()
+    print('Total: %d, Time: ' % num, time.time()-start)
+
 
 if __name__ == "__main__":
-    YOLO()
+    import fire
+    fire.Fire(YOLO)
